@@ -74,7 +74,7 @@ def mostrar_poligonos(df_r1, df_r2, productos):
         for anio in sorted(df_producto["Año"].unique()):
             df_anio = df_producto[df_producto["Año"] == anio]
             df_grouped = df_anio.groupby("Día-Mes")["$ Ventas sin impuestos Totales"].sum().reset_index()
-            df_grouped = df_grouped.sort_values("Día-Mes")
+            df_grouped = df_grouped.sort_values("Día-Mes", key=lambda x: pd.to_datetime(x, format='%d-%b', errors='coerce'))
             fig.add_trace(go.Scatter(
                 x=df_grouped["Día-Mes"],
                 y=df_grouped["$ Ventas sin impuestos Totales"],
@@ -89,6 +89,7 @@ def mostrar_poligonos(df_r1, df_r2, productos):
             height=450
         )
         st.plotly_chart(fig, use_container_width=True)
+
 
 def mostrar_ventas_mensuales(df):
     st.subheader("📈 6. Análisis Mensual por Categoría y Marca")
