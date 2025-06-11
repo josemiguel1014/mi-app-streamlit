@@ -67,9 +67,10 @@ def mostrar_poligonos(df_r1, df_r2, productos):
 
     # Crear columna de identificación y de nombre limpio
     df_completo["Producto Marca"] = (
-        df_completo["Plu DESC"].astype(str).str.strip() + " - " + 
-        df_completo["Marca DESC"].astype(str).strip()
-    )
+    df_completo["Plu DESC"].astype(str).str.strip() + " - " + 
+    df_completo["Marca DESC"].astype(str).str.strip()
+)
+
 
     # Crear diccionario para extraer solo el nombre del producto (sin el número del PLU)
     def extraer_nombre(plu_desc):
