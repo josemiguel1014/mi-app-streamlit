@@ -66,7 +66,7 @@ def mostrar_poligonos(df_r1, df_r2, productos):
     df_completo = pd.concat([df_r1, df_r2])
 
     for producto in productos:
-        df_producto = df_completo[df_completo["Plu PluCD"].astype(str) == producto].copy()
+        df_producto = df_completo[df_completo["Plu DESC"].astype(str) == producto].copy()
         df_producto["Año"] = df_producto["Dia DiaID"].dt.year
         df_producto["Día-Mes"] = df_producto["Dia DiaID"].dt.strftime('%d-%b')
 
