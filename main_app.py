@@ -65,12 +65,15 @@ def mostrar_poligonos(df_r1, df_r2, productos):
     st.subheader("📈 Polígonos de Frecuencia por Producto")
     df_completo = pd.concat([df_r1, df_r2])
 
-    # Asegura que "Producto Marca" esté bien formado
+    # Crear la columna "Producto Marca" para filtrar
     df_completo["Producto Marca"] = (
         df_completo["Plu DESC"].astype(str).str.strip() +
         " - " +
         df_completo["Marca DESC"].astype(str).str.strip()
     )
+
+    # Crear diccionario para mapear "Producto Marca" a "Plu DESC" (nombre del producto)
+    mapa_nombres = dict(zip(df_completo["Producto Marca"], df_completo["Plu DESC"]))
 
     for producto in productos:
         df_producto = df_completo[df_completo["Producto Marca"] == producto].copy()
@@ -89,13 +92,15 @@ def mostrar_poligonos(df_r1, df_r2, productos):
                 name=str(anio)
             ))
 
+        nombre_producto = mapa_nombres.get(producto, producto)
         fig.update_layout(
-            title=f"{producto} - Frecuencia de Ventas por Día y Año",
+            title=f"{nombre_producto} - Frecuencia de Ventas por Día y Año",
             xaxis_title="Día - Mes",
             yaxis_title="Ventas sin impuestos",
             height=450
         )
         st.plotly_chart(fig, use_container_width=True)
+
 
 def mostrar_ventas_mensuales(df):
     st.subheader("📈 6. Análisis Mensual por Categoría y Marca")
