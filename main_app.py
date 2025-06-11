@@ -63,7 +63,12 @@ def mostrar_comparacion(comparacion_df):
 
 def mostrar_poligonos(df_r1, df_r2, productos):
     st.subheader("📈 Polígonos de Frecuencia por Producto")
+
+    # Unir ambos dataframes
     df_completo = pd.concat([df_r1, df_r2])
+
+    # Crear la columna combinada "Producto Marca"
+    df_completo["Producto Marca"] = df_completo["Plu DESC"] + " - " + df_completo["Marca DESC"]
 
     for producto in productos:
         df_producto = df_completo[df_completo["Producto Marca"] == producto].copy()
@@ -75,6 +80,7 @@ def mostrar_poligonos(df_r1, df_r2, productos):
             df_anio = df_producto[df_producto["Año"] == anio]
             df_grouped = df_anio.groupby("Día-Mes")["$ Ventas sin impuestos Totales"].sum().reset_index()
             df_grouped = df_grouped.sort_values("Día-Mes", key=lambda x: pd.to_datetime(x, format='%d-%b', errors='coerce'))
+
             fig.add_trace(go.Scatter(
                 x=df_grouped["Día-Mes"],
                 y=df_grouped["$ Ventas sin impuestos Totales"],
@@ -89,7 +95,6 @@ def mostrar_poligonos(df_r1, df_r2, productos):
             height=450
         )
         st.plotly_chart(fig, use_container_width=True)
-
 
 def mostrar_ventas_mensuales(df):
     st.subheader("📈 6. Análisis Mensual por Categoría y Marca")
