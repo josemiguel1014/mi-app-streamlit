@@ -1,3 +1,5 @@
+%%writefile main_app.py
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -33,7 +35,6 @@ def generar_excel(df_r1, df_r2, comparacion):
 def mostrar_comparacion(comparacion_df):
     st.subheader("📊 Resumen Comparativo")
 
-    # Insertar columna PLU justo después de Producto
     if "Plu PluCD" in comparacion_df.columns:
         cols = list(comparacion_df.columns)
         prod_idx = cols.index("Producto")
@@ -61,35 +62,33 @@ def mostrar_comparacion(comparacion_df):
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
-def mostrar_poligonos(df_r1, df_r2, productos):
+def mostrar_poligonos(df_r1, df_r2, plus):
     st.subheader("📈 Polígonos de Frecuencia por Producto")
     df_completo = pd.concat([df_r1, df_r2])
 
-    # Crear columna de identificación y de nombre limpio
-    df_completo["Producto Marca"] = (
-    df_completo["Plu DESC"].astype(str).str.strip() + " - " + 
-    df_completo["Marca DESC"].astype(str).str.strip()
-)
+    df_completo["$ Ventas sin impuestos Totales"] = (
+        df_completo["$ Ventas sin impuestos Totales"]
+        .replace('[\$,]', '', regex=True)
+        .astype(float)
+    )
 
+    for plu in plus:
+        df_producto = df_completo[df_completo["Plu PluCD"].astype(str) == plu].copy()
 
-    # Crear diccionario para extraer solo el nombre del producto (sin el número del PLU)
-    def extraer_nombre(plu_desc):
-        partes = plu_desc.split(" - ", 1)
-        return partes[1].strip() if len(partes) > 1 else plu_desc.strip()
+        if df_producto.empty:
+            st.warning(f"⚠️ No hay ventas para el PLU: {plu}")
+            continue
 
-    df_completo["Nombre limpio"] = df_completo["Plu DESC"].apply(extraer_nombre)
-    mapa_nombres = dict(zip(df_completo["Producto Marca"], df_completo["Nombre limpio"]))
-
-    for producto in productos:
-        df_producto = df_completo[df_completo["Producto Marca"] == producto].copy()
+        nombre = df_producto["Plu DESC"].iloc[0]
         df_producto["Año"] = df_producto["Dia DiaID"].dt.year
-        df_producto["Día-Mes"] = df_producto["Dia DiaID"].dt.strftime('%d-%b')
+        df_producto["Día-Mes"] = df_producto["Dia DiaID"].dt.strftime('%m-%d')
 
         fig = go.Figure()
         for anio in sorted(df_producto["Año"].unique()):
             df_anio = df_producto[df_producto["Año"] == anio]
             df_grouped = df_anio.groupby("Día-Mes")["$ Ventas sin impuestos Totales"].sum().reset_index()
-            df_grouped = df_grouped.sort_values("Día-Mes", key=lambda x: pd.to_datetime(x, format='%d-%b', errors='coerce'))
+            df_grouped = df_grouped.sort_values("Día-Mes")
+
             fig.add_trace(go.Scatter(
                 x=df_grouped["Día-Mes"],
                 y=df_grouped["$ Ventas sin impuestos Totales"],
@@ -97,93 +96,13 @@ def mostrar_poligonos(df_r1, df_r2, productos):
                 name=str(anio)
             ))
 
-        nombre_producto = mapa_nombres.get(producto, producto)
         fig.update_layout(
-            title=f"{nombre_producto} - Frecuencia de Ventas por Día y Año",
+            title=f"{nombre} - Frecuencia de Ventas por Día y Año",
             xaxis_title="Día - Mes",
             yaxis_title="Ventas sin impuestos",
             height=450
         )
         st.plotly_chart(fig, use_container_width=True)
-
-def mostrar_ventas_mensuales(df):
-    st.subheader("📈 6. Análisis Mensual por Categoría y Marca")
-
-    if not pd.api.types.is_datetime64_any_dtype(df["Dia DiaID"]):
-        try:
-            df["Dia DiaID"] = pd.to_datetime(df["Dia DiaID"])
-        except Exception as e:
-            st.error(f"Error convertir 'Dia DiaID': {e}")
-            return
-
-    df["Mes"] = df["Dia DiaID"].dt.strftime('%B')
-    df["Mes_Num"] = df["Dia DiaID"].dt.month
-    df["Año"] = df["Dia DiaID"].dt.year
-    df["Mes_Año"] = df["Dia DiaID"].dt.strftime('%Y, %B')
-
-    df = df[(df["Año"] == 2025) & (df["Mes_Num"] <= 5)]
-    if df.empty:
-        st.warning("⚠️ No hay datos disponibles hasta mayo 2025.")
-        return
-
-    categorias = sorted(df["Sublinea DESC"].dropna().unique())
-    categoria_seleccionada = st.selectbox("Selecciona una categoría (Sublinea DESC):", categorias)
-    marcas_disponibles = sorted(df[df["Sublinea DESC"] == categoria_seleccionada]["Marca DESC"].dropna().unique())
-
-    with st.form("form_marcas"):
-        marcas_seleccionadas = st.multiselect("Selecciona marcas:", marcas_disponibles)
-        submitted = st.form_submit_button("🔍 Mostrar análisis")
-
-    if submitted:
-        if not categoria_seleccionada or not marcas_seleccionadas:
-            st.warning("⚠️ Selecciona categoría y al menos una marca.")
-            return
-
-        df_categoria = df[df["Sublinea DESC"] == categoria_seleccionada]
-        for marca in marcas_seleccionadas:
-            df_marca = df_categoria[df_categoria["Marca DESC"] == marca]
-            ventas = df_marca.groupby(["Mes_Año", "Mes_Num"])["$ Ventas sin impuestos Totales"].sum().reset_index()
-            ventas = ventas.sort_values("Mes_Num")
-            ventas["YoY"] = ventas["$ Ventas sin impuestos Totales"].pct_change() * 100
-
-            max_yoy = ventas["YoY"].abs().max()
-            y2_max = min(max(max_yoy * 1.2, 100), 300)
-
-            st.markdown(f"### 📊 Marca: {marca}")
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=ventas["Mes_Año"],
-                y=ventas["$ Ventas sin impuestos Totales"] / 1e6,
-                name="Ventas (Millones)",
-                marker_color='rgba(31, 119, 180, 0.8)',
-                text=[f"${v/1e6:.1f}M" for v in ventas["$ Ventas sin impuestos Totales"]],
-                textposition='inside',
-                insidetextanchor='start',
-                textfont=dict(size=11, color="white")
-            ))
-            fig.add_trace(go.Scatter(
-                x=ventas["Mes_Año"],
-                y=ventas["YoY"],
-                name="% Var YoY",
-                mode='lines+markers+text',
-                yaxis='y2',
-                line=dict(color='rgba(50, 171, 96, 0.9)', width=3),
-                marker=dict(size=10, color='rgba(50, 171, 96, 1)'),
-                text=[f"{v:.1f}%" if pd.notna(v) else "" for v in ventas["YoY"]],
-                textposition='top center',
-                textfont=dict(size=11, color="darkgreen")
-            ))
-            fig.update_layout(
-                title=dict(text=f"Tendencia de Ventas y %Var YoY - {marca.upper()}",
-                           x=0.5, font=dict(size=18)),
-                xaxis=dict(title="Mes y Año", tickangle=-30),
-                yaxis=dict(title="Ventas (Millones $)", side='left'),
-                yaxis2=dict(title="% Var YoY", overlaying='y', side='right',
-                            range=[-y2_max, y2_max]),
-                legend=dict(orientation="h", y=1.05, x=0.5, xanchor="center"),
-                bargap=0.25, height=600, plot_bgcolor='white'
-            )
-            st.plotly_chart(fig, use_container_width=True)
 
 def main():
     st.title("📊 Comparador de Ventas por Producto - Clientes Digitales")
@@ -198,10 +117,9 @@ def main():
     else:
         archivo_subido = st.file_uploader("📁 Sube tu archivo CSV", type=["csv"])
         if archivo_subido:
-                df = cargar_datos_desde_archivo(archivo_subido)
+            df = cargar_datos_desde_archivo(archivo_subido)
 
     if df is not None:
-
         df["Producto"] = df["Plu DESC"].astype(str) + " - " + df["Marca DESC"].astype(str)
         productos = df["Plu PluCD"].astype(str).tolist()
         plu_to_producto = dict(zip(df["Plu PluCD"].astype(str), df["Producto"]))
@@ -256,11 +174,9 @@ def main():
                 comparacion_df = pd.DataFrame(comparacion)
                 mostrar_comparacion(comparacion_df)
                 mostrar_poligonos(df_r1, df_r2, st.session_state.productos)
-                mostrar_ventas_mensuales(df)
-
+                # Puedes mantener aquí otras funciones, como mostrar_ventas_mensuales(df)
                 excel_data = generar_excel(df_r1, df_r2, comparacion_df)
                 st.download_button("📥 Exportar datos a Excel", data=excel_data, file_name="comparacion_ventas.xlsx")
 
 if __name__ == "__main__":
     main()
-
