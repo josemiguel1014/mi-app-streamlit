@@ -1,3 +1,5 @@
+%%writefile main_app.py
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -32,13 +34,11 @@ def generar_excel(df_r1, df_r2, comparacion):
 
 def mostrar_comparacion(comparacion_df):
     st.subheader("📊 Resumen Comparativo")
-
     if "Plu PluCD" in comparacion_df.columns:
         cols = list(comparacion_df.columns)
         prod_idx = cols.index("Producto")
         cols.insert(prod_idx + 1, cols.pop(cols.index("Plu PluCD")))
         comparacion_df = comparacion_df[cols]
-
     st.dataframe(comparacion_df)
 
     fig_bar = go.Figure()
@@ -60,43 +60,47 @@ def mostrar_comparacion(comparacion_df):
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
-def mostrar_poligonos(df_r1, df_r2, plus):
+def mostrar_poligonos(df_r1, df_r2, plus, r1s, r1e, r2s, r2e):
     st.subheader("📈 Polígonos de Frecuencia por Producto")
     df_completo = pd.concat([df_r1, df_r2])
-
     df_completo["$ Ventas sin impuestos Totales"] = (
         df_completo["$ Ventas sin impuestos Totales"]
         .replace('[\$,]', '', regex=True)
         .astype(float)
     )
+    df_completo = df_completo[
+        ((df_completo["Dia DiaID"] >= r1s) & (df_completo["Dia DiaID"] <= r1e)) |
+        ((df_completo["Dia DiaID"] >= r2s) & (df_completo["Dia DiaID"] <= r2e))
+    ]
+
+    mismo_anio = r1s.year == r2s.year
 
     for plu in plus:
         df_producto = df_completo[df_completo["Plu PluCD"].astype(str) == plu].copy()
-
         if df_producto.empty:
             st.warning(f"⚠️ No hay ventas para el PLU: {plu}")
             continue
 
         nombre = df_producto["Plu DESC"].iloc[0]
-        df_producto["Año"] = df_producto["Dia DiaID"].dt.year
-        df_producto["Día-Mes"] = df_producto["Dia DiaID"].dt.strftime('%m-%d')
+        df_producto["Etiqueta"] = df_producto["Dia DiaID"].dt.strftime("%B") if mismo_anio else df_producto["Dia DiaID"].dt.year.astype(str)
+        df_producto["Día"] = df_producto["Dia DiaID"].dt.day
 
         fig = go.Figure()
-        for anio in sorted(df_producto["Año"].unique()):
-            df_anio = df_producto[df_producto["Año"] == anio]
-            df_grouped = df_anio.groupby("Día-Mes")["$ Ventas sin impuestos Totales"].sum().reset_index()
-            df_grouped = df_grouped.sort_values("Día-Mes")
+        for etiqueta in sorted(df_producto["Etiqueta"].unique()):
+            df_etiqueta = df_producto[df_producto["Etiqueta"] == etiqueta]
+            df_grouped = df_etiqueta.groupby("Día")["$ Ventas sin impuestos Totales"].sum().reset_index()
+            df_grouped = df_grouped.sort_values("Día")
 
             fig.add_trace(go.Scatter(
-                x=df_grouped["Día-Mes"],
+                x=df_grouped["Día"],
                 y=df_grouped["$ Ventas sin impuestos Totales"],
                 mode='lines+markers',
-                name=str(anio)
+                name=str(etiqueta)
             ))
 
         fig.update_layout(
-            title=f"{nombre} - Frecuencia de Ventas por Día y Año",
-            xaxis_title="Día - Mes",
+            title=f"{nombre} - Frecuencia de Ventas por Día",
+            xaxis_title="Día del mes",
             yaxis_title="Ventas sin impuestos",
             height=450
         )
@@ -121,20 +125,16 @@ def main():
         df["Producto"] = df["Plu DESC"].astype(str) + " - " + df["Marca DESC"].astype(str)
         productos = df["Plu PluCD"].astype(str).tolist()
         plu_to_producto = dict(zip(df["Plu PluCD"].astype(str), df["Producto"]))
-
         opciones = [f"{plu} - {plu_to_producto[plu]}" for plu in set(productos)]
         seleccion = st.multiselect("📌 Selecciona productos por PLU o nombre:", opciones)
 
         if st.button("✅ Continuar productos"):
-            selected_plus = [item.split(" - ")[0] for item in seleccion]
-            st.session_state.productos = selected_plus
+            st.session_state.productos = [item.split(" - ")[0] for item in seleccion]
 
         if "productos" in st.session_state and st.session_state.productos:
             df_filtrado = df[df["Plu PluCD"].astype(str).isin(st.session_state.productos)]
             min_f = df_filtrado["Dia DiaID"].min().date()
             max_f = df_filtrado["Dia DiaID"].max().date()
-
-            st.subheader("📆 Selecciona los rangos de fecha")
             col1, col2 = st.columns(2)
             with col1:
                 r1 = st.date_input("📅 Fecha Actual", [min_f, max_f], min_value=min_f, max_value=max_f, key='r1')
@@ -171,8 +171,7 @@ def main():
 
                 comparacion_df = pd.DataFrame(comparacion)
                 mostrar_comparacion(comparacion_df)
-                mostrar_poligonos(df_r1, df_r2, st.session_state.productos)
-                # Puedes mantener aquí otras funciones, como mostrar_ventas_mensuales(df)
+                mostrar_poligonos(df_r1, df_r2, st.session_state.productos, r1s, r1e, r2s, r2e)
                 excel_data = generar_excel(df_r1, df_r2, comparacion_df)
                 st.download_button("📥 Exportar datos a Excel", data=excel_data, file_name="comparacion_ventas.xlsx")
 
